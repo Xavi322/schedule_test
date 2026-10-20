@@ -138,6 +138,7 @@ def ensure_template(template_path):
         'var firstGroup=groups.slice().shift();',
         'var initial=(saved&&allSchedules[saved])?saved:firstGroup;',
         'if(initial){selectEl.value=initial;renderGroup(initial);}',
+        'if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js");}',
         '</script></body></html>'
     ]
     with open(template_path, "w", encoding="utf-8") as f:
