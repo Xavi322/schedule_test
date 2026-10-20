@@ -30,5 +30,5 @@ jobs:
         run: |
           git config user.name "Schedule Bot"
           git config user.email "bot@github.com"
-          git add index.html
+          git add index.html manifest.json icon.svg sw.js
           git diff --staged --quiet || (git commit -m "Автообновление расписания" && git push)
