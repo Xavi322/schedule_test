@@ -1,15 +1,18 @@
 {
+  "id": "./",
   "name": "Расписание занятий",
   "short_name": "Расписание",
-  "start_url": "./index.html",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f4f6f9",
   "theme_color": "#1e293b",
   "icons": [
     {
-      "src": "https://flaticon.com",
-      "sizes": "512x512",
-      "type": "image/png"
+      "src": "icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }

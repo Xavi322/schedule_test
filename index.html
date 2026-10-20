@@ -2,6 +2,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e293b">
 <link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Расписание занятий</title><style>
@@ -125,4 +128,5 @@ var saved=getSavedGroup();
 var firstGroup=groups.slice().shift();
 var initial=(saved&&allSchedules[saved])?saved:firstGroup;
 if(initial){selectEl.value=initial;renderGroup(initial);}
+if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js");}
 </script></body></html>
