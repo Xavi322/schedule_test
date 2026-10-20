@@ -11,6 +11,8 @@ def ensure_template(template_path):
         '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
         '<meta name="theme-color" content="#1e293b">',
+        '<meta name="apple-mobile-web-app-capable" content="yes">',
+        '<meta name="mobile-web-app-capable" content="yes">',
         '<title>Расписание занятий</title><style>',
         ':root{--bg:#f4f6f9;--card:#fff;--pri:#3b82f6;--pri-l:#eff6ff;--pur:#7c3aed;--pur-l:#f5f3ff;--pur-b:#ddd6fe;--warn:#ea580c;--warn-l:#fff7ed;--warn-b:#fed7aa;--dng:#dc2626;--dng-l:#fef2f2;--dng-b:#fecaca;--txt:#1e293b;--mut:#64748b;--brd:#e2e8f0;--grn:#10b981}',
         '*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}',
