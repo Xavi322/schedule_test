@@ -55,31 +55,28 @@ def create_calendar_png(filepath, size=512):
         f.write(png_bytes)
 
 def generate_pwa_files():
-    """Создает отдельные иконки 192 и 512, manifest.json и sw.js."""
-    create_calendar_png(os.path.join(BASE_DIR, "icon-192.png"), size=192)
-    create_calendar_png(os.path.join(BASE_DIR, "icon-512.png"), size=512)
+    """Создает чистые PNG-иконки для лаунчера Android и Firefox."""
+    create_calendar_png(os.path.join(BASE_DIR, "app-icon-192.png"), size=192)
+    create_calendar_png(os.path.join(BASE_DIR, "app-icon-512.png"), size=512)
     create_calendar_png(os.path.join(BASE_DIR, "icon.png"), size=192)
 
-    # Параметр ?v=2 сбрасывает закэшированный белый квадрат в телефоне!
     manifest = {
         "name": "Расписание занятий",
         "short_name": "Расписание",
         "start_url": "./index.html",
         "display": "standalone",
-        "background_color": "#f4f6f9",
+        "background_color": "#3b82f6",
         "theme_color": "#1e293b",
         "icons": [
             {
-                "src": "icon-192.png?v=2",
+                "src": "app-icon-192.png",
                 "sizes": "192x192",
-                "type": "image/png",
-                "purpose": "any"
+                "type": "image/png"
             },
             {
-                "src": "icon-512.png?v=2",
+                "src": "app-icon-512.png",
                 "sizes": "512x512",
-                "type": "image/png",
-                "purpose": "any"
+                "type": "image/png"
             }
         ]
     }
@@ -93,6 +90,7 @@ def generate_pwa_files():
     )
     with open(os.path.join(BASE_DIR, "sw.js"), "w", encoding="utf-8") as f:
         f.write(sw_code)
+
 
 if __name__ == "__main__":
     print("=== 1. Скачиваем таблицы из Облака Mail.ru ===")
