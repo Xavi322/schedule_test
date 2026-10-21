@@ -53,7 +53,7 @@ header h1{font-size:1.2rem;font-weight:700}
 .btn-close{background:#e2e8f0;color:var(--txt)}
 </style></head><body>
 <header><h1>📅 Расписание на неделю</h1>
-<div class="controls"><select id="groupSelect" class="group-select"></select>
+<div class="controls"><select id="groupSelect" class="group-select" autocomplete="off"></select>
 <button id="saveGroupBtn" class="save-btn" onclick="saveMyGroup()">📌 Запомнить</button></div></header>
 <div id="weekGrid" class="week-grid"></div>
 <div id="linkModal" class="modal-overlay" onclick="if(event.target===this)closeModal()">
@@ -72,14 +72,26 @@ var saveBtn=document.getElementById("saveGroupBtn");
 var grid=document.getElementById("weekGrid");
 var groups=Object.keys(allSchedules);
 groups.forEach(function(g){var o=document.createElement("option");o.value=g;o.textContent=g;selectEl.appendChild(o);});
-function getSavedGroup(){try{return localStorage.getItem("my_default_group")||"";}catch(e){return "";}}
+function getSavedGroup(){
+  try{
+    var ls=localStorage.getItem("my_default_group");
+    if(ls)return ls;
+    var m=document.cookie.match(/(?:^|; )my_default_group=([^;]*)/);
+    if(m)return decodeURIComponent(m.pop());
+  }catch(e){}
+  return "";
+}
 function updateSaveBtn(){
   var saved=getSavedGroup();
   if(saved&&saved===selectEl.value){saveBtn.textContent="✅ Моя группа";saveBtn.className="save-btn is-saved";}
   else{saveBtn.textContent="📌 Запомнить";saveBtn.className="save-btn";}
 }
 function saveMyGroup(){
-  try{localStorage.setItem("my_default_group",selectEl.value);}catch(e){}
+  var val=selectEl.value;
+  try{
+    localStorage.setItem("my_default_group",val);
+    document.cookie="my_default_group="+encodeURIComponent(val)+"; path=/; max-age=31536000; SameSite=Lax";
+  }catch(e){}
   updateSaveBtn();
 }
 function renderGroup(groupName){
@@ -125,9 +137,13 @@ function renderGroup(groupName){
   });
 }
 selectEl.onchange=function(){renderGroup(this.value);};
-var saved=getSavedGroup();
-var firstGroup=groups.slice().shift();
-var initial=(saved&&allSchedules[saved])?saved:firstGroup;
-if(initial){selectEl.value=initial;renderGroup(initial);}
+function applyDefaultGroup(){
+  var saved=getSavedGroup();
+  var firstGroup=groups.slice().shift();
+  var target=(saved&&allSchedules[saved])?saved:firstGroup;
+  if(target){selectEl.value=target;renderGroup(target);}
+}
+applyDefaultGroup();
+window.addEventListener("pageshow",applyDefaultGroup);
 if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js");}
 </script></body></html>
