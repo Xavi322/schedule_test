@@ -82,12 +82,14 @@ def ensure_template(template_path):
         'var grid=document.getElementById("weekGrid");',
         'var groups=Object.keys(allSchedules);',
         'groups.forEach(function(g){var o=document.createElement("option");o.value=g;o.textContent=g;selectEl.appendChild(o);});',
-                'function getSavedGroup(){',
+        'var STORAGE_KEY="pinned_group_v3";',
+        'function getSavedGroup(){',
         '  try{',
-        '    var ls=localStorage.getItem("my_default_group");',
-        '    if(ls)return ls;',
-        '    var m=document.cookie.match(/(?:^|; )my_default_group=([^;]*)/);',
+        '    var v=localStorage.getItem(STORAGE_KEY);',
+        '    if(v)return v;',
+        '    var m=document.cookie.match(/(?:^|; )pinned_group_v3=([^;]*)/);',
         '    if(m)return decodeURIComponent(m.pop());',
+        '    if(window.name&&allSchedules[window.name])return window.name;',
         '  }catch(e){}',
         '  return "";',
         '}',
@@ -99,8 +101,10 @@ def ensure_template(template_path):
         'function saveMyGroup(){',
         '  var val=selectEl.value;',
         '  try{',
-        '    localStorage.setItem("my_default_group",val);',
-        '    document.cookie="my_default_group="+encodeURIComponent(val)+"; path=/; max-age=31536000; SameSite=Lax";',
+        '    localStorage.clear();',
+        '    localStorage.setItem(STORAGE_KEY,val);',
+        '    document.cookie="pinned_group_v3="+encodeURIComponent(val)+"; path=/; max-age=31536000";',
+        '    window.name=val;',
         '  }catch(e){}',
         '  updateSaveBtn();',
         '}',
@@ -147,19 +151,24 @@ def ensure_template(template_path):
         '  });',
         '}',
         'selectEl.onchange=function(){renderGroup(this.value);};',
-        'function applyDefaultGroup(){',
+        'function forceRestoreGroup(){',
         '  var saved=getSavedGroup();',
         '  var firstGroup=groups.slice().shift();',
         '  var target=(saved&&allSchedules[saved])?saved:firstGroup;',
-        '  if(target){selectEl.value=target;renderGroup(target);}',
+        '  if(target&&selectEl.value!==target){selectEl.value=target;renderGroup(target);}',
+        '  else if(target&&grid.innerHTML===""){renderGroup(target);}',
         '}',
-        'applyDefaultGroup();',
-        'window.addEventListener("pageshow",applyDefaultGroup);',
+        'forceRestoreGroup();',
+        'setTimeout(forceRestoreGroup,150);',
+        'setTimeout(forceRestoreGroup,500);',
+        'window.addEventListener("pageshow",function(){setTimeout(forceRestoreGroup,50);});',
         'if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js");}',
         '</script></body></html>'
     ]
     with open(template_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
+
+
 
 
 
