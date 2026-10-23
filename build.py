@@ -5,7 +5,17 @@ import struct
 from downloader import sync_cloud_files
 from parser import generate_week_calendar, BASE_DIR
 
-CLOUD_FOLDER_URL = "https://cloud.mail.ru/public/s9pr/NyGVkqDRw"
+FOLDERS = {
+    "main": {
+        "title": "🎓 Очное",
+        "url": "https://cloud.mail.ru/public/s9pr/NyGVkqDRw"
+    },
+    "iup": {
+        "title": "💼 ИУП",
+        "url": "https://cloud.mail.ru/public/ycXv/dTTxtDU6Z"
+    }
+}
+
 
 def create_calendar_png(filepath, size=512):
     """Генерирует 100% валидную PNG-иконку календаря."""
