@@ -194,29 +194,45 @@ def get_link_val(sheet, row, col):
     return cell_text
 
 def load_all_online_links(links_path):
-    """Загружает онлайн-ссылки из столбца D и примечания/пароли из столбца E."""
+    """
+    Умный загрузчик ссылок: сам определяет формат файла.
+    Для очников: C - Преподаватель, D - Ссылка, E - Пароль.
+    Для ИУП:      C - Ссылка, D - Пароль.
+    """
     all_links = []
     if not links_path or not os.path.exists(links_path):
         return all_links
     wb = openpyxl.load_workbook(links_path, data_only=True)
     sheet = wb.active
     
+    # 🎯 АВТООПРЕДЕЛЕНИЕ ФОРМАТА: Ищем, в каком столбце лежит ссылка (в C или в D)
+    # Проверяем первые 5 строк таблицы на наличие интернет-ссылки
+    link_col = 4  # По умолчанию формат очников (столбец D)
+    notes_col = 5 # По умолчанию формат очников (столбец E)
+    
+    for r in range(1, 6):
+        val_c = str(sheet.cell(row=r, column=3).value or "").lower()
+        val_d = str(sheet.cell(row=r, column=4).value or "").lower()
+        # Если в столбце C написано 'ссылка' или текст начинается с http
+        if "http" in val_c or "ссылк" in val_c or "zoom" in val_c or "teams" in val_c:
+            link_col = 3   # Переключаемся на формат ИУП (ссылка в C)
+            notes_col = 4  # Пароль в D
+            break
+
     for r in range(1, sheet.max_row + 1):
         grp = get_val(sheet, r, 1)   # Столбец A - Группа
         subj = get_val(sheet, r, 2)  # Столбец B - Предмет
         
-        # Читаем саму ссылку из 4-го столбца D
-        raw_link = get_link_val(sheet, r, 4)
-        # Читаем дополнения/пароли из 5-го столбца E (справа от ссылки)
-        notes = get_val(sheet, r, 5)
+        # Читаем ссылку и пароль по динамически определенным столбцам
+        raw_link = get_link_val(sheet, r, link_col)
+        notes = get_val(sheet, r, notes_col)
         
         if grp and subj and raw_link:
-            # Вычленяем чистый URL из столбца D (на случай если там есть мусор)
             url_match = re.search(r'(https?://[^\s()]+)', raw_link)
             if url_match:
                 clean_url = url_match.group(1)
                 
-                # Если в столбце E справа что-то написано — приклеиваем к ссылке
+                # Склеиваем ссылку с паролем, если он есть
                 if notes:
                     final_payload = f"{clean_url} | {notes}"
                 else:
@@ -228,6 +244,7 @@ def load_all_online_links(links_path):
                     "link": final_payload
                 })
     return all_links
+
 
 
 def find_matching_link(group_name, subject_text, room_text, all_links):
