@@ -124,42 +124,35 @@ def save_item(session, base_dl_url, item, local_filename):
     print(f"✅ Сохранено: {local_filename}")
     return True
 
-def sync_cloud_files(folder_url):
-    session = requests.Session()
-    today = get_moscow_today()
-    monday = today - datetime.timedelta(days=today.weekday())
-
-    print("🌐 Проверяем папку Облака Mail.ru...")
+def sync_single_folder(session, folder_url, prefix, today, monday):
+    """Скачивает ссылки и недели из одной конкретной папки облака."""
+    print(f"\n🌐 Проверяем папку [{prefix.upper()}]: {folder_url}")
     xlsx_items, base_dl_url = extract_folder_data_from_html(session, folder_url)
-
     if not xlsx_items:
-        print("❌ На странице не найдено .xlsx файлов!")
+        print(f"⚠️ В папке [{prefix}] не найдено таблиц!")
         return []
 
-    # 1. Качаем файл со ссылками
+    # 1. Качаем файл со ссылками (если он есть в этой папке)
     links_item = next((i for i in xlsx_items if "ссылк" in i.get("name", "").lower()), None)
     if links_item:
-        save_item(session, base_dl_url, links_item, "links.xlsx")
+        save_item(session, base_dl_url, links_item, f"{prefix}_links.xlsx")
+        if prefix == "main":
+            save_item(session, base_dl_url, links_item, "links.xlsx")
 
-    # 2. Собираем ВСЕ файлы расписания (текущую и будущие недели)
+    # 2. Собираем файлы недель
     sched_candidates = [i for i in xlsx_items if i != links_item]
     dated_weeks = []
-
     for item in sched_candidates:
         info = parse_week_range(item.get("name", ""), today)
         if info:
             s_d, e_d, label = info
-            # Берем недели, которые еще не закончились (или начались на этой неделе)
             if e_d >= monday:
                 is_curr = (s_d <= today <= e_d) or (s_d == monday)
                 dated_weeks.append({
-                    "start": s_d,
-                    "item": item,
-                    "label": f"📅 {label} (Текущая)" if is_curr else f"📅 {label}",
-                    "is_current": is_curr
+                    "start": s_d, "item": item, "is_current": is_curr,
+                    "label": f"📅 {label} (Текущая)" if is_curr else f"📅 {label}"
                 })
 
-    # Если вдруг в папке лежат только старые недели — берем их все, чтобы сайт не был пустым
     if not dated_weeks:
         for item in sched_candidates:
             info = parse_week_range(item.get("name", ""), today)
@@ -167,30 +160,61 @@ def sync_cloud_files(folder_url):
             s_d = info[0] if info else today
             dated_weeks.append({"start": s_d, "item": item, "label": lbl, "is_current": False})
 
-    # Сортируем недели строго по хронологии (от ранней к более поздней)
     dated_weeks.sort(key=lambda w: w["start"])
 
-    weeks_meta = []
+    folder_meta = []
     for idx, w in enumerate(dated_weeks):
-        local_fname = f"schedule_{idx}.xlsx"
+        local_fname = f"{prefix}_schedule_{idx}.xlsx"
         if save_item(session, base_dl_url, w["item"], local_fname):
-            weeks_meta.append({
-                "id": f"week_{idx}",
+            folder_meta.append({
+                "id": f"{prefix}_week_{idx}",
                 "label": w["label"],
                 "file": local_fname,
                 "is_current": w["is_current"]
             })
-            # Для обратной совместимости копируем первую/текущую неделю также в schedule.xlsx
-            if w["is_current"] or idx == 0:
-                save_item(session, base_dl_url, w["item"], "schedule.xlsx")
+    return folder_meta
+
+def sync_cloud_files(folders_config):
+    """
+    Принимает либо одну строку-ссылку, либо словарь вида:
+    {"main": {"title": "Очное", "url": "..."}, "iup": {"title": "ИУП / Заочное", "url": "..."}}
+    """
+    session = requests.Session()
+    today = get_moscow_today()
+    monday = today - datetime.timedelta(days=today.weekday())
+
+    if isinstance(folders_config, str):
+        folders_config = {"main": {"title": "Основное", "url": folders_config}}
+
+    all_meta = {}
+    for key, cfg in folders_config.items():
+        url = cfg.get("url", "").strip()
+        if not url or "XXXX" in url:
+            continue
+        weeks_list = sync_single_folder(session, url, key, today, monday)
+        if weeks_list:
+            all_meta[key] = {
+                "title": cfg.get("title", key),
+                "links_file": f"{key}_links.xlsx",
+                "weeks": weeks_list
+            }
 
     meta_path = os.path.join(BASE_DIR, "weeks_meta.json")
     with open(meta_path, "w", encoding="utf-8") as mf:
-        json.dump(weeks_meta, mf, ensure_ascii=False, indent=2)
+        json.dump(all_meta, mf, ensure_ascii=False, indent=2)
 
-    print(f"🎉 Загружено недель расписания: {len(weeks_meta)}")
-    return weeks_meta
+    print(f"\n🎉 Синхронизация завершена! Потоков загружено: {len(all_meta)}")
+    return all_meta
 
 if __name__ == "__main__":
-    CLOUD_FOLDER_URL = "https://mail.rupublic/s9pr/NyGVkqDRw"
-    sync_cloud_files(CLOUD_FOLDER_URL)
+    FOLDERS = {
+        "main": {
+            "title": "🎓 Очное",
+            "url": "https://cloud.mail.ru/public/s9pr/NyGVkqDRw"
+        },
+        "iup": {
+            "title": "💼 ИУП (Заочное)",
+            "url": "https://cloud.mail.ru/public/ycXv/dTTxtDU6Z"
+        }
+    }
+    sync_cloud_files(FOLDERS)
