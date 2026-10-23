@@ -399,17 +399,21 @@ def generate_week_calendar(filename="schedule.xlsx", links_file="links.xlsx", ou
                 for w in mode_info.get("weeks", []):
                     f_path = os.path.join(BASE_DIR, w["file"])
                     if os.path.exists(f_path):
-                        # Находим все группы в текущем файле без жесткого шага col += 2
                         wb = openpyxl.load_workbook(f_path, data_only=True)
                         sheet = wb.active
                         groups_dict = {}
-                        skip_w = ("день", "пара", "время", "ауд", "каб", "место", "недел", "дата")
+                        skip_w = ("день", "пара", "время", "ауд", "каб", "место", "недел", "дата", "препод")
                         
-                        for col in range(4, sheet.max_column + 1):
+                        # Возвращаем умный цикл-указатель, чтобы контролировать шаг
+                        col = 4
+                        while col <= sheet.max_column:
                             title = get_val(sheet, 1, col).replace("\n", " ").strip()
+                            # Если нашли реальную группу
                             if title and not any(word in title.lower() for word in skip_w):
-                                # Защита: если это имя группы, парсим её
                                 groups_dict[title] = parse_single_group(sheet, col, title, mode_links)
+                                col += 2  # Жестко забираем этот столбец и его ауд (col+1), шагаем дальше
+                            else:
+                                col += 1  # Если в шапке мусор или пустой столбец, просто сдвигаемся на 1
                         
                         if groups_dict:
                             weeks_list.append({
@@ -419,7 +423,7 @@ def generate_week_calendar(filename="schedule.xlsx", links_file="links.xlsx", ou
                             })
                 if weeks_list:
                     app_data[mode_key] = {"title": mode_info.get("title", mode_key), "weeks": weeks_list}
-    # Запасной вариант для локального одного файла, если meta_path не найден
+    # Запасной вариант для локального запуска без мета-файла
     if not app_data:
         sched_path = os.path.join(BASE_DIR, filename)
         l_path = os.path.join(BASE_DIR, links_file)
@@ -428,10 +432,14 @@ def generate_week_calendar(filename="schedule.xlsx", links_file="links.xlsx", ou
             wb = openpyxl.load_workbook(sched_path, data_only=True)
             sheet = wb.active
             groups_dict = {}
-            for col in range(4, sheet.max_column + 1):
+            col = 4
+            while col <= sheet.max_column:
                 title = get_val(sheet, 1, col).replace("\n", " ").strip()
                 if title and not any(w in title.lower() for w in ("день", "пара", "время", "ауд", "каб")):
                     groups_dict[title] = parse_single_group(sheet, col, title, mode_links)
+                    col += 2
+                else:
+                    col += 1
             
             app_data["main"] = {
                 "title": "🎓 Очное",
