@@ -391,7 +391,7 @@ def generate_week_calendar(filename="schedule.xlsx", links_file="links.xlsx", ou
         if isinstance(raw_meta, dict):
             for mode_key, mode_info in raw_meta.items():
                 l_path = os.path.join(BASE_DIR, mode_info.get("links_file", links_file))
-                if not os.path.exists(l_path):
+                if not os.path.exists(l_path): 
                     l_path = os.path.join(BASE_DIR, links_file)
                 mode_links = load_all_online_links(l_path)
 
@@ -399,25 +399,43 @@ def generate_week_calendar(filename="schedule.xlsx", links_file="links.xlsx", ou
                 for w in mode_info.get("weeks", []):
                     f_path = os.path.join(BASE_DIR, w["file"])
                     if os.path.exists(f_path):
-                        weeks_list.append({
-                            "label": w["label"],
-                            "is_current": w.get("is_current", False),
-                            "groups": parse_workbook_all_groups(f_path, mode_links)
-                        })
+                        # Находим все группы в текущем файле без жесткого шага col += 2
+                        wb = openpyxl.load_workbook(f_path, data_only=True)
+                        sheet = wb.active
+                        groups_dict = {}
+                        skip_w = ("день", "пара", "время", "ауд", "каб", "место", "недел", "дата")
+                        
+                        for col in range(4, sheet.max_column + 1):
+                            title = get_val(sheet, 1, col).replace("\n", " ").strip()
+                            if title and not any(word in title.lower() for word in skip_w):
+                                # Защита: если это имя группы, парсим её
+                                groups_dict[title] = parse_single_group(sheet, col, title, mode_links)
+                        
+                        if groups_dict:
+                            weeks_list.append({
+                                "label": w["label"], 
+                                "is_current": w.get("is_current", False), 
+                                "groups": groups_dict
+                            })
                 if weeks_list:
                     app_data[mode_key] = {"title": mode_info.get("title", mode_key), "weeks": weeks_list}
-
+    # Запасной вариант для локального одного файла, если meta_path не найден
     if not app_data:
         sched_path = os.path.join(BASE_DIR, filename)
         l_path = os.path.join(BASE_DIR, links_file)
         if os.path.exists(sched_path):
+            mode_links = load_all_online_links(l_path)
+            wb = openpyxl.load_workbook(sched_path, data_only=True)
+            sheet = wb.active
+            groups_dict = {}
+            for col in range(4, sheet.max_column + 1):
+                title = get_val(sheet, 1, col).replace("\n", " ").strip()
+                if title and not any(w in title.lower() for w in ("день", "пара", "время", "ауд", "каб")):
+                    groups_dict[title] = parse_single_group(sheet, col, title, mode_links)
+            
             app_data["main"] = {
                 "title": "🎓 Очное",
-                "weeks": [{
-                    "label": "📅 Текущая неделя",
-                    "is_current": True,
-                    "groups": parse_workbook_all_groups(sched_path, load_all_online_links(l_path))
-                }]
+                "weeks": [{"label": "📅 Текущая неделя", "is_current": True, "groups": groups_dict}]
             }
 
     with open(template_path, "r", encoding="utf-8") as tf:
@@ -431,5 +449,3 @@ def generate_week_calendar(filename="schedule.xlsx", links_file="links.xlsx", ou
 
 if __name__ == "__main__":
     generate_week_calendar("schedule.xlsx", "links.xlsx", "index.html")
-
-
