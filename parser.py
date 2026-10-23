@@ -274,6 +274,7 @@ def parse_subject_details(subject_text):
         return res
     text = subject_text.strip()
 
+    # 1. Проверяем ПЕРЕНОС НА
     move_to = r"[\s\-–—(]*ПЕРЕНОС\s+НА\s+(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)[\s)!.]*$"
     m_to = re.search(move_to, text, flags=re.IGNORECASE)
     if m_to:
@@ -281,26 +282,33 @@ def parse_subject_details(subject_text):
         res["remove_reason"] = f"➔ на {m_to.group(1)}"
         text = re.sub(move_to, "", text, flags=re.IGNORECASE).strip()
 
+    # 2. Проверяем ПЕРЕНОС С
     move_from = r"[\s\-–—(]*ПЕРЕНОС\s+С\s+(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)[\s)!.]*$"
     m_from = re.search(move_from, text, flags=re.IGNORECASE)
     if m_from:
         res["moved_from"] = m_from.group(1)
         text = re.sub(move_from, "", text, flags=re.IGNORECASE).strip()
 
+    # 3. Проверяем ОТМЕНА
     cancel = r"[\s\-–—(]*ОТМЕНА[\s)!.]*$"
     if re.search(cancel, text, flags=re.IGNORECASE):
         res["is_removed"] = True
         res["remove_reason"] = "Отмена"
         text = re.sub(cancel, "", text, flags=re.IGNORECASE).strip()
 
+    # 4. УМНЫЙ ПЕРЕХВАТ ВРЕМЕНИ: Ищем паттерн ЧЦ:ММ в самом начале строки
     time_pat = r"^(?:[свСВ]\s*)?(\d{1,2}[:.]\d{2}(?:\s*[-–—]\s*\d{1,2}[:.]\d{2})?)\s*(.*)"
     m_time = re.match(time_pat, text, flags=re.DOTALL)
     if m_time:
-        res["custom_time"] = m_time.group(1).replace(".", ":")
-        text = m_time.group(2).strip(" -–—\n\t")
+        # Проверяем, что это не часть какого-то кода или госта (длина оставшегося текста должна быть осмысленной)
+        potential_subject = m_time.group(2).strip(" -–—\n\t")
+        if len(potential_subject) > 2:
+            res["custom_time"] = m_time.group(1).replace(".", ":")
+            text = potential_subject
 
     res["subject"] = text
     return res
+
 
 def parse_single_group(sheet, group_col, group_name, all_links):
     # Место проведения ВСЕГДА строго в столбце справа от предмета группы
