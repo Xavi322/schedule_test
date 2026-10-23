@@ -207,6 +207,151 @@ def ensure_template(template_path):
     with open(template_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
+def get_val(sheet, row, col):
+    cell = sheet.cell(row=row, column=col)
+    if cell.value is not None:
+        return str(cell.value).strip()
+    for merged in sheet.merged_cells.ranges:
+        if cell.coordinate in merged:
+            val = sheet.cell(row=merged.min_row, column=merged.min_col).value
+            return str(val).strip() if val is not None else ""
+    return ""
+
+def get_link_val(sheet, row, col):
+    cell = sheet.cell(row=row, column=col)
+    if cell.hyperlink and cell.hyperlink.target:
+        return str(cell.hyperlink.target).strip()
+    return get_val(sheet, row, col)
+
+def load_all_online_links(links_path):
+    all_links = []
+    if not links_path or not os.path.exists(links_path):
+        return all_links
+    wb = openpyxl.load_workbook(links_path, data_only=True)
+    sheet = wb.active
+    for r in range(1, sheet.max_row + 1):
+        grp = get_val(sheet, r, 1)
+        subj = get_val(sheet, r, 2)
+        link = get_link_val(sheet, r, 4)
+        if grp and subj and link:
+            all_links.append({
+                "group": grp.lower(),
+                "subject": " ".join(subj.lower().split()),
+                "link": link
+            })
+    return all_links
+
+def find_matching_link(group_name, subject_text, room_text, all_links):
+    if not subject_text or not all_links:
+        return None
+    room_low = (room_text or "").lower()
+    subj_low = subject_text.lower()
+    online_markers = ("онлайн", "дист", "эиос", "online", "zoom", "сферум", "вебинар", "teams")
+    has_online_word = any(m in room_low or m in subj_low for m in online_markers)
+    has_digits_in_room = any(ch.isdigit() for ch in room_low)
+    if has_digits_in_room and not has_online_word:
+        return None
+
+    grp_low = group_name.lower()
+    norm_subject = " ".join(subj_low.split())
+    best_link, best_len = None, 0
+    for item in all_links:
+        if (item["group"] in grp_low or grp_low in item["group"]) and item["subject"] in norm_subject:
+            if len(item["subject"]) > best_len:
+                best_link = item["link"]
+                best_len = len(item["subject"])
+    return best_link
+
+def parse_subject_details(subject_text):
+    res = {"subject": "", "custom_time": None, "is_removed": False, "remove_reason": None, "moved_from": None}
+    if not subject_text:
+        return res
+    text = subject_text.strip()
+
+    move_to = r"[\s\-–—(]*ПЕРЕНОС\s+НА\s+(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)[\s)!.]*$"
+    m_to = re.search(move_to, text, flags=re.IGNORECASE)
+    if m_to:
+        res["is_removed"] = True
+        res["remove_reason"] = f"➔ на {m_to.group(1)}"
+        text = re.sub(move_to, "", text, flags=re.IGNORECASE).strip()
+
+    move_from = r"[\s\-–—(]*ПЕРЕНОС\s+С\s+(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)[\s)!.]*$"
+    m_from = re.search(move_from, text, flags=re.IGNORECASE)
+    if m_from:
+        res["moved_from"] = m_from.group(1)
+        text = re.sub(move_from, "", text, flags=re.IGNORECASE).strip()
+
+    cancel = r"[\s\-–—(]*ОТМЕНА[\s)!.]*$"
+    if re.search(cancel, text, flags=re.IGNORECASE):
+        res["is_removed"] = True
+        res["remove_reason"] = "Отмена"
+        text = re.sub(cancel, "", text, flags=re.IGNORECASE).strip()
+
+    time_pat = r"^(?:[свСВ]\s*)?(\d{1,2}[:.]\d{2}(?:\s*[-–—]\s*\d{1,2}[:.]\d{2})?)\s*(.*)"
+    m_time = re.match(time_pat, text, flags=re.DOTALL)
+    if m_time:
+        res["custom_time"] = m_time.group(1).replace(".", ":")
+        text = m_time.group(2).strip(" -–—\n\t")
+
+    res["subject"] = text
+    return res
+
+def parse_single_group(sheet, group_col, group_name, all_links):
+    room_col = group_col + 1
+    days_data, day_lookup, current_day = [], {}, None
+
+    for r in range(2, sheet.max_row + 1):
+        day_cell = get_val(sheet, r, 1)
+        if day_cell:
+            current_day = day_cell.replace("\n", " ")
+            if current_day not in day_lookup:
+                day_obj = {"day": current_day, "slots": [], "removed": []}
+                days_data.append(day_obj)
+                day_lookup[current_day] = day_obj
+
+        if not current_day:
+            continue
+
+        pair_num = get_val(sheet, r, 2)
+        pair_time = get_val(sheet, r, 3).replace("\n", " ")
+        raw_subject = get_val(sheet, r, group_col)
+        room = get_val(sheet, r, room_col).replace("\n", " ")
+
+        info = parse_subject_details(raw_subject)
+        online_link = find_matching_link(group_name, info["subject"], room, all_links)
+
+        if pair_num or pair_time or raw_subject:
+            if info["is_removed"]:
+                day_lookup[current_day]["removed"].append({
+                    "num": pair_num, "subject": info["subject"].replace("\n", " "), "reason": info["remove_reason"]
+                })
+                day_lookup[current_day]["slots"].append({
+                    "num": pair_num, "time": pair_time, "custom_time": None,
+                    "subject": "", "room": "", "moved_from": None, "link": None
+                })
+            else:
+                day_lookup[current_day]["slots"].append({
+                    "num": pair_num, "time": pair_time, "custom_time": info["custom_time"],
+                    "subject": info["subject"], "room": room, "moved_from": info["moved_from"], "link": online_link
+                })
+    return days_data
+
+def parse_workbook_all_groups(excel_path, all_links):
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    sheet = wb.active
+    groups_dict = {}
+    skip_words = ("день", "пара", "время", "ауд", "каб", "место", "недел", "дата")
+    col = 4
+    while col <= sheet.max_column:
+        title = get_val(sheet, 1, col).replace("\n", " ").strip()
+        if title and not any(w in title.lower() for w in skip_words):
+            groups_dict[title] = parse_single_group(sheet, col, title, all_links)
+            col += 2
+        else:
+            col += 1
+    return groups_dict
+
+
 def generate_week_calendar(filename="schedule.xlsx", links_file="links.xlsx", output_html="index.html"):
     template_path = os.path.join(BASE_DIR, "template.html")
     output_path = os.path.join(BASE_DIR, output_html)

@@ -18,26 +18,19 @@ FOLDERS = {
 
 
 def create_calendar_png(filepath, size=512):
-    """Генерирует 100% валидную PNG-иконку календаря."""
+    """Генерирует PNG-иконку календаря."""
     rows = []
     for y in range(size):
-        # ВАЖНО: bytearray(1) создает стартовый нулевой байт фильтра PNG!
         row = bytearray(1)
         ny = y / size
         for x in range(size):
             nx = x / size
-            # Синий фон (#3b82f6)
             r, g, b = 59, 130, 246
-
-            # Белая карточка календаря по центру
             if 0.18 <= nx <= 0.82 and 0.22 <= ny <= 0.82:
                 if ny <= 0.36:
-                    # Темная шапка (#1e293b)
                     r, g, b = 30, 41, 59
                 else:
-                    # Белое поле
                     r, g, b = 255, 255, 255
-                    # Сетка пар
                     for cx in (0.33, 0.50, 0.67):
                         for cy in (0.50, 0.67):
                             if abs(nx - cx) < 0.055 and abs(ny - cy) < 0.055:
@@ -64,8 +57,9 @@ def create_calendar_png(filepath, size=512):
     with open(filepath, "wb") as f:
         f.write(png_bytes)
 
+
 def generate_pwa_files():
-    """Создает чистые PNG-иконки для лаунчера Android и Firefox."""
+    """Создает PNG-иконки, manifest.json и sw.js."""
     create_calendar_png(os.path.join(BASE_DIR, "app-icon-192.png"), size=192)
     create_calendar_png(os.path.join(BASE_DIR, "app-icon-512.png"), size=512)
     create_calendar_png(os.path.join(BASE_DIR, "icon.png"), size=192)
@@ -104,11 +98,11 @@ def generate_pwa_files():
 
 if __name__ == "__main__":
     print("=== 1. Скачиваем таблицы из Облака Mail.ru ===")
-    sync_cloud_files(CLOUD_FOLDER_URL)
-    
+    sync_cloud_files(FOLDERS)
+
     print("=== 2. Генерируем веб-страницу index.html ===")
     generate_week_calendar("schedule.xlsx", "links.xlsx", "index.html")
-    
+
     print("=== 3. Создаем файлы PWA ===")
     generate_pwa_files()
     print("🚀 Все файлы готовы!")
