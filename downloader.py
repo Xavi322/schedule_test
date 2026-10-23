@@ -57,11 +57,40 @@ def extract_folder_data_from_html(session, public_url):
 
 def parse_week_range(filename, today):
     """
-    Извлекает даты начала и конца недели из названия файла.
-    Возвращает кортеж (start_date, end_date, label) или None.
+    Безошибочно извлекает даты начала и конца недели из названия файла:
+    1) Сначала ищет полный диапазон с двумя месяцами: '26.10-01.11.2026' или '26.10 - 01.11'
+    2) Затем ищет сокращенный диапазон внутри одного месяца: '19-25.10.2026'
     """
-    # Вариант А: '19-25.10.2026' или '19-25.10'
-    short_m = re.search(r"(\d{1,2})\s*[-–—]\s*(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?", filename)
+    # Вариант А (Приоритетный): Две полные даты с точками ('26.10-01.11.2026')
+    full_m = re.search(
+        r"(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?\s*[-–—]\s*(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?",
+        filename
+    )
+    if full_m:
+        d1, m1, y1 = int(full_m.group(1)), int(full_m.group(2)), full_m.group(3)
+        d2, m2, y2 = int(full_m.group(4)), int(full_m.group(5)), full_m.group(6)
+
+        year2 = int(y2) if y2 else (int(y1) if y1 else today.year)
+        if year2 < 100:
+            year2 += 2000
+        year1 = int(y1) if y1 else year2
+        if year1 < 100:
+            year1 += 2000
+
+        # Если перешли через Новый год (например, 28.12 - 03.01.2027), а первый год не указан
+        if not y1 and m1 == 12 and m2 == 1:
+            year1 = year2 - 1
+
+        try:
+            s_d = datetime.date(year1, m1, d1)
+            e_d = datetime.date(year2, m2, d2)
+            label = f"{s_d.strftime('%d.%m')} — {e_d.strftime('%d.%m')}"
+            return s_d, e_d, label
+        except ValueError:
+            pass
+
+    # Вариант Б: Сокращенный диапазон '19-25.10.2026' (слева от первого числа НЕ должно быть точки!)
+    short_m = re.search(r"(?<![.\d])(\d{1,2})\s*[-–—]\s*(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?", filename)
     if short_m:
         d1, d2, month, y_str = int(short_m.group(1)), int(short_m.group(2)), int(short_m.group(3)), short_m.group(4)
         year = int(y_str) if y_str else today.year
@@ -74,31 +103,6 @@ def parse_week_range(filename, today):
             return s_d, e_d, label
         except ValueError:
             pass
-
-    # Вариант Б: '26.10 - 01.11.2026'
-    matches = re.findall(r"(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?", filename)
-    parsed = []
-    for d_str, m_str, y_str in matches:
-        day, month = int(d_str), int(m_str)
-        year = int(y_str) if y_str else today.year
-        if year < 100:
-            year += 2000
-        try:
-            parsed.append(datetime.date(year, month, day))
-        except ValueError:
-            continue
-
-    if len(parsed) >= 2:
-        s_d, e_d = parsed[:2]
-        if e_d < s_d:
-            e_d = e_d.replace(year=s_d.year + 1)
-        label = f"{s_d.strftime('%d.%m')} — {e_d.strftime('%d.%m')}"
-        return s_d, e_d, label
-    elif len(parsed) == 1:
-        s_d = next(iter(parsed))
-        e_d = s_d + datetime.timedelta(days=6)
-        label = f"{s_d.strftime('%d.%m')} — {e_d.strftime('%d.%m')}"
-        return s_d, e_d, label
 
     return None
 
