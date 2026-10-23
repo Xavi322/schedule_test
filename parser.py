@@ -6,7 +6,7 @@ import openpyxl
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def ensure_template(template_path):
-    """Создает template.html с выбором НЕДЕЛИ, выбором ГРУППЫ и кнопкой 'Запомнить'."""
+    """Создает template.html с выбором ПОТОКА (Очное/ИУП), НЕДЕЛИ и ГРУППЫ."""
     lines = [
         '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
@@ -22,6 +22,8 @@ def ensure_template(template_path):
         'header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px;padding:12px 16px;background:var(--card);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.05)}',
         'header h1{font-size:1.2rem;font-weight:700}',
         '.controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
+        '.mode-select{background:#475569;color:#fff;padding:8px 12px;border-radius:8px;font-weight:600;font-size:.9rem;border:none;cursor:pointer;outline:none}',
+        '.mode-select option{background:#fff;color:var(--txt)}',
         '.week-select{background:#1e293b;color:#fff;padding:8px 12px;border-radius:8px;font-weight:600;font-size:.9rem;border:none;cursor:pointer;outline:none}',
         '.week-select option{background:#fff;color:var(--txt)}',
         '.group-select{background:var(--pri);color:#fff;padding:8px 14px;border-radius:8px;font-weight:600;font-size:.95rem;border:none;cursor:pointer;outline:none}',
@@ -63,6 +65,7 @@ def ensure_template(template_path):
         '</style></head><body>',
         '<header><h1>📅 Расписание</h1>',
         '<div class="controls">',
+        '<select id="modeSelect" class="mode-select" autocomplete="off"></select>',
         '<select id="weekSelect" class="week-select" autocomplete="off"></select>',
         '<select id="groupSelect" class="group-select" autocomplete="off"></select>',
         '<button id="saveGroupBtn" class="save-btn" onclick="saveMyGroup()">📌 Запомнить</button>',
@@ -75,48 +78,64 @@ def ensure_template(template_path):
         '<button class="btn btn-copy" onclick="copyModalLink()">Скопировать</button>',
         '<button class="btn btn-close" onclick="closeModal()">Закрыть</button>',
         '</div></div></div><script>',
-        'var weeksPayload = __WEEKS_PAYLOAD_JSON__;',
+        'var appData = __APP_DATA_JSON__;',
         'function showLinkModal(u){var a=document.getElementById("modalLinkAnchor");a.href=u;a.textContent=u;document.getElementById("linkModal").style.display="flex";}',
         'function closeModal(){document.getElementById("linkModal").style.display="none";}',
         'function copyModalLink(){navigator.clipboard.writeText(document.getElementById("modalLinkAnchor").textContent);alert("Ссылка скопирована!");}',
+        'var modeEl=document.getElementById("modeSelect");',
         'var weekEl=document.getElementById("weekSelect");',
         'var selectEl=document.getElementById("groupSelect");',
         'var saveBtn=document.getElementById("saveGroupBtn");',
         'var grid=document.getElementById("weekGrid");',
-        'var STORAGE_KEY="pinned_group_v3";',
-        'var currentWeekIdx=0;',
-        'weeksPayload.forEach(function(w,idx){',
-        '  var o=document.createElement("option");o.value=idx;o.textContent=w.label;',
-        '  if(w.is_current)currentWeekIdx=idx;',
-        '  weekEl.appendChild(o);',
-        '});',
-        'weekEl.value=currentWeekIdx;',
-        'if(weeksPayload.length<=1){weekEl.style.display="none";}',
-        'var firstWeekObj=weeksPayload.slice().shift()||{groups:{}};',
-        'var groups=Object.keys(firstWeekObj.groups);',
-        'groups.forEach(function(g){var o=document.createElement("option");o.value=g;o.textContent=g;selectEl.appendChild(o);});',
-        'function getSavedGroup(){',
+        'var STORAGE_KEY="pinned_group_v4";',
+        'var modeKeys=Object.keys(appData);',
+        'modeKeys.forEach(function(k){var o=document.createElement("option");o.value=k;o.textContent=appData[k].title;modeEl.appendChild(o);});',
+        'if(modeKeys.length<=1){modeEl.style.display="none";}',
+        'function getSavedState(){',
         '  try{',
         '    var v=localStorage.getItem(STORAGE_KEY);if(v)return v;',
-        '    var m=document.cookie.match(/(?:^|; )pinned_group_v3=([^;]*)/);if(m)return decodeURIComponent(m.pop());',
+        '    var m=document.cookie.match(/(?:^|; )pinned_group_v4=([^;]*)/);if(m)return decodeURIComponent(m.pop());',
         '    if(window.name)return window.name;',
         '  }catch(e){}',
         '  return "";',
         '}',
+        'function populateMode(modeKey,preferredGroup){',
+        '  var mObj=appData[modeKey]||appData[modeKeys.slice().shift()];',
+        '  var weeksPayload=mObj.weeks||[];',
+        '  weekEl.innerHTML="";',
+        '  var currIdx=0;',
+        '  weeksPayload.forEach(function(w,idx){',
+        '    var o=document.createElement("option");o.value=idx;o.textContent=w.label;',
+        '    if(w.is_current)currIdx=idx;',
+        '    weekEl.appendChild(o);',
+        '  });',
+        '  weekEl.value=currIdx;',
+        '  weekEl.style.display=(weeksPayload.length<=1)?"none":"";',
+        '  var firstW=weeksPayload.slice().shift()||{groups:{}};',
+        '  var grps=Object.keys(firstW.groups);',
+        '  selectEl.innerHTML="";',
+        '  grps.forEach(function(g){var o=document.createElement("option");o.value=g;o.textContent=g;selectEl.appendChild(o);});',
+        '  if(preferredGroup&&firstW.groups[preferredGroup]){selectEl.value=preferredGroup;}',
+        '}',
         'function updateSaveBtn(){',
-        '  var saved=getSavedGroup();',
-        '  if(saved&&saved===selectEl.value){saveBtn.textContent="✅ Моя группа";saveBtn.className="save-btn is-saved";}',
+        '  var saved=getSavedState();',
+        '  var cur=modeEl.value+"|"+selectEl.value;',
+                'function updateSaveBtn(){',
+        '  var saved=getSavedState();',
+        '  var cur=modeEl.value+"|"+selectEl.value;',
+        '  if(saved&&saved===cur){saveBtn.textContent="✅ Моя группа";saveBtn.className="save-btn is-saved";}',
         '  else{saveBtn.textContent="📌 Запомнить";saveBtn.className="save-btn";}',
         '}',
         'function saveMyGroup(){',
-        '  var val=selectEl.value;',
-        '  try{localStorage.clear();localStorage.setItem(STORAGE_KEY,val);document.cookie="pinned_group_v3="+encodeURIComponent(val)+"; path=/; max-age=31536000";window.name=val;}catch(e){}',
+        '  var val=modeEl.value+"|"+selectEl.value;',
+        '  try{localStorage.clear();localStorage.setItem(STORAGE_KEY,val);document.cookie="pinned_group_v4="+encodeURIComponent(val)+"; path=/; max-age=31536000";window.name=val;}catch(e){}',
         '  updateSaveBtn();',
         '}',
-                'function renderCurrentView(){',
+        'function renderCurrentView(){',
         '  grid.innerHTML="";',
+        '  var mObj=appData[modeEl.value];if(!mObj)return;',
         '  var wIdx=parseInt(weekEl.value,10)||0;',
-        '  var weekObj=weeksPayload[wIdx]||firstWeekObj;',
+        '  var weekObj=mObj.weeks[wIdx]||mObj.weeks.slice().shift()||{groups:{}};',
         '  var groupName=selectEl.value;',
         '  var scheduleData=(weekObj.groups&&weekObj.groups[groupName])||[];',
         '  updateSaveBtn();',
@@ -145,7 +164,7 @@ def ensure_template(template_path):
         '      });',
         '    }',
         '    col.appendChild(sb);',
-        '    if(d.removed&&d.removed.length>0){',
+                '    if(d.removed&&d.removed.length>0){',
         '      var rs=document.createElement("div");rs.className="cancelled-section";',
         '      rs.innerHTML=\'<div class="cancelled-title">🚫 Снято с расписания:</div>\';',
         '      d.removed.forEach(function(r){',
@@ -158,15 +177,26 @@ def ensure_template(template_path):
         '    grid.appendChild(col);',
         '  });',
         '}',
+        'modeEl.onchange=function(){populateMode(this.value,"");renderCurrentView();};',
         'selectEl.onchange=renderCurrentView;',
         'weekEl.onchange=renderCurrentView;',
         'function forceRestoreGroup(){',
-        '  var saved=getSavedGroup();',
-        '  var firstGroup=groups.slice().shift();',
-        '  var target=(saved&&firstWeekObj.groups[saved])?saved:firstGroup;',
-        '  if(target&&selectEl.value!==target){selectEl.value=target;renderCurrentView();}',
-        '  else if(target&&grid.innerHTML===""){renderCurrentView();}',
+        '  var saved=getSavedState();',
+        '  var defMode=modeKeys.slice().shift();',
+        '  var targetMode=defMode,targetGroup="";',
+        '  if(saved&&saved.indexOf("|")!==-1){',
+        '    var parts=saved.split("|");',
+        '    var mCandidate=parts.slice().shift();',
+        '    var gCandidate=parts.pop();',
+        '    if(appData[mCandidate]){targetMode=mCandidate;targetGroup=gCandidate;}',
+        '  }',
+        '  if(modeEl.value!==targetMode||(targetGroup&&selectEl.value!==targetGroup)||grid.innerHTML===""){',
+        '    modeEl.value=targetMode;',
+        '    populateMode(targetMode,targetGroup);',
+        '    renderCurrentView();',
+        '  }',
         '}',
+        'populateMode(modeKeys.slice().shift(),"");',
         'forceRestoreGroup();',
         'setTimeout(forceRestoreGroup,150);',
         'setTimeout(forceRestoreGroup,500);',
@@ -177,191 +207,60 @@ def ensure_template(template_path):
     with open(template_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-def get_val(sheet, row, col):
-    cell = sheet.cell(row=row, column=col)
-    if cell.value is not None:
-        return str(cell.value).strip()
-    for merged in sheet.merged_cells.ranges:
-        if cell.coordinate in merged:
-            val = sheet.cell(row=merged.min_row, column=merged.min_col).value
-            return str(val).strip() if val is not None else ""
-    return ""
-
-def get_link_val(sheet, row, col):
-    cell = sheet.cell(row=row, column=col)
-    if cell.hyperlink and cell.hyperlink.target:
-        return str(cell.hyperlink.target).strip()
-    return get_val(sheet, row, col)
-
-def load_all_online_links(links_path):
-    all_links = []
-    if not links_path or not os.path.exists(links_path):
-        return all_links
-    wb = openpyxl.load_workbook(links_path, data_only=True)
-    sheet = wb.active
-    for r in range(1, sheet.max_row + 1):
-        grp = get_val(sheet, r, 1)
-        subj = get_val(sheet, r, 2)
-        link = get_link_val(sheet, r, 4)
-        if grp and subj and link:
-            all_links.append({
-                "group": grp.lower(),
-                "subject": " ".join(subj.lower().split()),
-                "link": link
-            })
-    return all_links
-
-def find_matching_link(group_name, subject_text, room_text, all_links):
-    if not subject_text or not all_links:
-        return None
-    room_low = (room_text or "").lower()
-    subj_low = subject_text.lower()
-    online_markers = ("онлайн", "дист", "эиос", "online", "zoom", "сферум", "вебинар", "teams")
-    has_online_word = any(m in room_low or m in subj_low for m in online_markers)
-    has_digits_in_room = any(ch.isdigit() for ch in room_low)
-    if has_digits_in_room and not has_online_word:
-        return None
-
-    grp_low = group_name.lower()
-    norm_subject = " ".join(subj_low.split())
-    best_link, best_len = None, 0
-    for item in all_links:
-        if (item["group"] in grp_low or grp_low in item["group"]) and item["subject"] in norm_subject:
-            if len(item["subject"]) > best_len:
-                best_link = item["link"]
-                best_len = len(item["subject"])
-    return best_link
-
-def parse_subject_details(subject_text):
-    res = {"subject": "", "custom_time": None, "is_removed": False, "remove_reason": None, "moved_from": None}
-    if not subject_text:
-        return res
-    text = subject_text.strip()
-
-    move_to = r"[\s\-–—(]*ПЕРЕНОС\s+НА\s+(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)[\s)!.]*$"
-    m_to = re.search(move_to, text, flags=re.IGNORECASE)
-    if m_to:
-        res["is_removed"] = True
-        res["remove_reason"] = f"➔ на {m_to.group(1)}"
-        text = re.sub(move_to, "", text, flags=re.IGNORECASE).strip()
-
-    move_from = r"[\s\-–—(]*ПЕРЕНОС\s+С\s+(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)[\s)!.]*$"
-    m_from = re.search(move_from, text, flags=re.IGNORECASE)
-    if m_from:
-        res["moved_from"] = m_from.group(1)
-        text = re.sub(move_from, "", text, flags=re.IGNORECASE).strip()
-
-    cancel = r"[\s\-–—(]*ОТМЕНА[\s)!.]*$"
-    if re.search(cancel, text, flags=re.IGNORECASE):
-        res["is_removed"] = True
-        res["remove_reason"] = "Отмена"
-        text = re.sub(cancel, "", text, flags=re.IGNORECASE).strip()
-
-    time_pat = r"^(?:[свСВ]\s*)?(\d{1,2}[:.]\d{2}(?:\s*[-–—]\s*\d{1,2}[:.]\d{2})?)\s*(.*)"
-    m_time = re.match(time_pat, text, flags=re.DOTALL)
-    if m_time:
-        res["custom_time"] = m_time.group(1).replace(".", ":")
-        text = m_time.group(2).strip(" -–—\n\t")
-
-    res["subject"] = text
-    return res
-
-def parse_single_group(sheet, group_col, group_name, all_links):
-    room_col = group_col + 1
-    days_data, day_lookup, current_day = [], {}, None
-
-    for r in range(2, sheet.max_row + 1):
-        day_cell = get_val(sheet, r, 1)
-        if day_cell:
-            current_day = day_cell.replace("\n", " ")
-            if current_day not in day_lookup:
-                day_obj = {"day": current_day, "slots": [], "removed": []}
-                days_data.append(day_obj)
-                day_lookup[current_day] = day_obj
-
-        if not current_day:
-            continue
-
-        pair_num = get_val(sheet, r, 2)
-        pair_time = get_val(sheet, r, 3).replace("\n", " ")
-        raw_subject = get_val(sheet, r, group_col)
-        room = get_val(sheet, r, room_col).replace("\n", " ")
-
-        info = parse_subject_details(raw_subject)
-        online_link = find_matching_link(group_name, info["subject"], room, all_links)
-
-        if pair_num or pair_time or raw_subject:
-            if info["is_removed"]:
-                day_lookup[current_day]["removed"].append({
-                    "num": pair_num, "subject": info["subject"].replace("\n", " "), "reason": info["remove_reason"]
-                })
-                day_lookup[current_day]["slots"].append({
-                    "num": pair_num, "time": pair_time, "custom_time": None,
-                    "subject": "", "room": "", "moved_from": None, "link": None
-                })
-            else:
-                day_lookup[current_day]["slots"].append({
-                    "num": pair_num, "time": pair_time, "custom_time": info["custom_time"],
-                    "subject": info["subject"], "room": room, "moved_from": info["moved_from"], "link": online_link
-                })
-    return days_data
-
-def parse_workbook_all_groups(excel_path, all_links):
-    wb = openpyxl.load_workbook(excel_path, data_only=True)
-    sheet = wb.active
-    groups_dict = {}
-    skip_words = ("день", "пара", "время", "ауд", "каб", "место", "недел", "дата")
-    col = 4
-    while col <= sheet.max_column:
-        title = get_val(sheet, 1, col).replace("\n", " ").strip()
-        if title and not any(w in title.lower() for w in skip_words):
-            groups_dict[title] = parse_single_group(sheet, col, title, all_links)
-            col += 2
-        else:
-            col += 1
-    return groups_dict
-
 def generate_week_calendar(filename="schedule.xlsx", links_file="links.xlsx", output_html="index.html"):
-    links_path = os.path.join(BASE_DIR, links_file)
     template_path = os.path.join(BASE_DIR, "template.html")
     output_path = os.path.join(BASE_DIR, output_html)
     meta_path = os.path.join(BASE_DIR, "weeks_meta.json")
 
     ensure_template(template_path)
-    all_links = load_all_online_links(links_path)
+    app_data = {}
 
-    weeks_payload = []
-    # Если downloader.py создал список недель — парсим каждую неделю!
     if os.path.exists(meta_path):
         with open(meta_path, "r", encoding="utf-8") as mf:
-            weeks_meta = json.load(mf)
-        for w in weeks_meta:
-            f_path = os.path.join(BASE_DIR, w["file"])
-            if os.path.exists(f_path):
-                weeks_payload.append({
-                    "label": w["label"],
-                    "is_current": w.get("is_current", False),
-                    "groups": parse_workbook_all_groups(f_path, all_links)
-                })
+            raw_meta = json.load(mf)
 
-    # Запасной вариант, если есть только один schedule.xlsx
-    if not weeks_payload:
+        if isinstance(raw_meta, dict):
+            for mode_key, mode_info in raw_meta.items():
+                l_path = os.path.join(BASE_DIR, mode_info.get("links_file", links_file))
+                if not os.path.exists(l_path):
+                    l_path = os.path.join(BASE_DIR, links_file)
+                mode_links = load_all_online_links(l_path)
+
+                weeks_list = []
+                for w in mode_info.get("weeks", []):
+                    f_path = os.path.join(BASE_DIR, w["file"])
+                    if os.path.exists(f_path):
+                        weeks_list.append({
+                            "label": w["label"],
+                            "is_current": w.get("is_current", False),
+                            "groups": parse_workbook_all_groups(f_path, mode_links)
+                        })
+                if weeks_list:
+                    app_data[mode_key] = {"title": mode_info.get("title", mode_key), "weeks": weeks_list}
+
+    if not app_data:
         sched_path = os.path.join(BASE_DIR, filename)
+        l_path = os.path.join(BASE_DIR, links_file)
         if os.path.exists(sched_path):
-            weeks_payload.append({
-                "label": "📅 Текущая неделя",
-                "is_current": True,
-                "groups": parse_workbook_all_groups(sched_path, all_links)
-            })
+            app_data["main"] = {
+                "title": "🎓 Очное",
+                "weeks": [{
+                    "label": "📅 Текущая неделя",
+                    "is_current": True,
+                    "groups": parse_workbook_all_groups(sched_path, load_all_online_links(l_path))
+                }]
+            }
 
     with open(template_path, "r", encoding="utf-8") as tf:
         html_content = tf.read()
 
-    html_content = html_content.replace("__WEEKS_PAYLOAD_JSON__", json.dumps(weeks_payload, ensure_ascii=False))
+    html_content = html_content.replace("__APP_DATA_JSON__", json.dumps(app_data, ensure_ascii=False))
 
     with open(output_path, "w", encoding="utf-8") as out:
         out.write(html_content)
-    print(f"✅ Собрано недель в календарь: {len(weeks_payload)} -> {output_path}")
+    print(f"✅ Собрано потоков в календарь: {len(app_data)} -> {output_path}")
 
 if __name__ == "__main__":
     generate_week_calendar("schedule.xlsx", "links.xlsx", "index.html")
+
+
