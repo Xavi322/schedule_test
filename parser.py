@@ -274,24 +274,23 @@ def parse_single_group(sheet, group_col, group_name, all_links):
         raw_subject = get_val(sheet, r, group_col)
         room = get_val(sheet, r, room_col).replace("\n", " ")
 
+        # 🎯 ЗАЩИТА ИУП: Если вместо предмета/кабинета написано имя группы — очищаем
+        if raw_subject.strip().lower() == group_name.strip().lower():
+            raw_subject = ""
+        if room.strip().lower() == group_name.strip().lower():
+            room = ""
+
         info = parse_subject_details(raw_subject)
         online_link = find_matching_link(group_name, info["subject"], room, all_links)
 
         if pair_num or pair_time or raw_subject:
             if info["is_removed"]:
-                day_lookup[current_day]["removed"].append({
-                    "num": pair_num, "subject": info["subject"].replace("\n", " "), "reason": info["remove_reason"]
-                })
-                day_lookup[current_day]["slots"].append({
-                    "num": pair_num, "time": pair_time, "custom_time": None,
-                    "subject": "", "room": "", "moved_from": None, "link": None
-                })
+                day_lookup[current_day]["removed"].append({"num": pair_num, "subject": info["subject"].replace("\n", " "), "reason": info["remove_reason"]})
+                day_lookup[current_day]["slots"].append({"num": pair_num, "time": pair_time, "custom_time": None, "subject": "", "room": "", "moved_from": None, "link": None})
             else:
-                day_lookup[current_day]["slots"].append({
-                    "num": pair_num, "time": pair_time, "custom_time": info["custom_time"],
-                    "subject": info["subject"], "room": room, "moved_from": info["moved_from"], "link": online_link
-                })
+                day_lookup[current_day]["slots"].append({"num": pair_num, "time": pair_time, "custom_time": info["custom_time"], "subject": info["subject"], "room": room, "moved_from": info["moved_from"], "link": online_link})
     return days_data
+
 
 def parse_workbook_all_groups(excel_path, all_links):
     wb = openpyxl.load_workbook(excel_path, data_only=True)
