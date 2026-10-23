@@ -194,7 +194,7 @@ def get_link_val(sheet, row, col):
     return cell_text
 
 def load_all_online_links(links_path):
-    """Загружает ссылки для всех групп, вычленяя URL и сохраняя пароли."""
+    """Загружает онлайн-ссылки из столбца D и примечания/пароли из столбца E."""
     all_links = []
     if not links_path or not os.path.exists(links_path):
         return all_links
@@ -202,23 +202,25 @@ def load_all_online_links(links_path):
     sheet = wb.active
     
     for r in range(1, sheet.max_row + 1):
-        grp = get_val(sheet, r, 1)
-        subj = get_val(sheet, r, 2)
-        # Читаем склеенный текст ссылки и пароля из 4-го столбца D
-        raw_link_data = get_link_val(sheet, r, 4)
+        grp = get_val(sheet, r, 1)   # Столбец A - Группа
+        subj = get_val(sheet, r, 2)  # Столбец B - Предмет
         
-        if grp and subj and raw_link_data:
-            # С помощью регулярного выражения находим чистый URL-адрес внутри текста
-            url_match = re.search(r'(https?://[^\s()]+)', raw_link_data)
+        # Читаем саму ссылку из 4-го столбца D
+        raw_link = get_link_val(sheet, r, 4)
+        # Читаем дополнения/пароли из 5-го столбца E (справа от ссылки)
+        notes = get_val(sheet, r, 5)
+        
+        if grp and subj and raw_link:
+            # Вычленяем чистый URL из столбца D (на случай если там есть мусор)
+            url_match = re.search(r'(https?://[^\s()]+)', raw_link)
             if url_match:
                 clean_url = url_match.group(1)
-                # Убираем сам URL из текста, чтобы оставить только чистый пароль/код
-                text_notes = raw_link_data.replace(clean_url, "").strip(" ( )")
                 
-                # Сохраняем и чистую ссылку для перехода, и примечание с паролем
-                final_payload = clean_url
-                if text_notes:
-                    final_payload = f"{clean_url} | {text_notes}"
+                # Если в столбце E справа что-то написано — приклеиваем к ссылке
+                if notes:
+                    final_payload = f"{clean_url} | {notes}"
+                else:
+                    final_payload = clean_url
                     
                 all_links.append({
                     "group": grp.lower(),
@@ -226,6 +228,7 @@ def load_all_online_links(links_path):
                     "link": final_payload
                 })
     return all_links
+
 
 def find_matching_link(group_name, subject_text, room_text, all_links):
     if not subject_text or not all_links:
