@@ -163,9 +163,7 @@ def ensure_template(template_path):
         f.write("\n".join(lines))
 
 
-    ]
-    with open(template_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+  
 
 def get_val(sheet, row, col):
     cell = sheet.cell(row=row, column=col)
