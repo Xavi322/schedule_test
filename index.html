@@ -147,4 +147,5 @@ function initApp(){
   if(tM){modeEl.value=tM;populateMode(tM,tG);renderCurrentView();}
 }
 initApp();setTimeout(initApp,200);
+if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js");}
 </script></body></html>
