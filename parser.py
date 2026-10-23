@@ -175,27 +175,56 @@ def get_val(sheet, row, col):
     return ""
 
 def get_link_val(sheet, row, col):
+    """
+    Вытаскивает из ячейки и скрытую ссылку, и видимый текст (пароли, коды).
+    Возвращает строку, где все данные склеены.
+    """
     cell = sheet.cell(row=row, column=col)
+    cell_text = str(cell.value or "").strip()
+    
+    # Если внутри ячейки зашита скрытая гиперссылка Excel
     if cell.hyperlink and cell.hyperlink.target:
-        return str(cell.hyperlink.target).strip()
-    return get_val(sheet, row, col)
+        hyperlink_url = str(cell.hyperlink.target).strip()
+        # Если текст поверх ссылки совпадает с ней или пустой, берем только ссылку
+        if not cell_text or cell_text == hyperlink_url:
+            return hyperlink_url
+        # Если текст содержит пароль/информацию, склеиваем их через пробел
+        return f"{hyperlink_url} (Информация: {cell_text})"
+        
+    return cell_text
 
 def load_all_online_links(links_path):
+    """Загружает ссылки для всех групп, вычленяя URL и сохраняя пароли."""
     all_links = []
     if not links_path or not os.path.exists(links_path):
         return all_links
     wb = openpyxl.load_workbook(links_path, data_only=True)
     sheet = wb.active
+    
     for r in range(1, sheet.max_row + 1):
         grp = get_val(sheet, r, 1)
         subj = get_val(sheet, r, 2)
-        link = get_link_val(sheet, r, 4)
-        if grp and subj and link:
-            all_links.append({
-                "group": grp.lower(),
-                "subject": " ".join(subj.lower().split()),
-                "link": link
-            })
+        # Читаем склеенный текст ссылки и пароля из 4-го столбца D
+        raw_link_data = get_link_val(sheet, r, 4)
+        
+        if grp and subj and raw_link_data:
+            # С помощью регулярного выражения находим чистый URL-адрес внутри текста
+            url_match = re.search(r'(https?://[^\s()]+)', raw_link_data)
+            if url_match:
+                clean_url = url_match.group(1)
+                # Убираем сам URL из текста, чтобы оставить только чистый пароль/код
+                text_notes = raw_link_data.replace(clean_url, "").strip(" ( )")
+                
+                # Сохраняем и чистую ссылку для перехода, и примечание с паролем
+                final_payload = clean_url
+                if text_notes:
+                    final_payload = f"{clean_url} | {text_notes}"
+                    
+                all_links.append({
+                    "group": grp.lower(),
+                    "subject": " ".join(subj.lower().split()),
+                    "link": final_payload
+                })
     return all_links
 
 def find_matching_link(group_name, subject_text, room_text, all_links):
