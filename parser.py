@@ -157,12 +157,11 @@ def ensure_template(template_path):
         '  if(tM){modeEl.value=tM;populateMode(tM,tG);renderCurrentView();}',
         '}',
         'initApp();setTimeout(initApp,200);',
+        'if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js");}',
         '</script></body></html>'
     ]
     with open(template_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-
-
   
 
 def get_val(sheet, row, col):
