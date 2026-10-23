@@ -303,6 +303,9 @@ def parse_subject_details(subject_text):
     return res
 
 def parse_single_group(sheet, group_col, group_name, all_links):
+    # Место проведения ВСЕГДА строго в столбце справа от предмета группы
+    room_col = group_col + 1
+    
     days_data, day_lookup, current_day = [], {}, None
     g_low = group_name.strip().lower()
 
@@ -320,29 +323,13 @@ def parse_single_group(sheet, group_col, group_name, all_links):
 
         pair_num = get_val(sheet, r, 2)
         pair_time = get_val(sheet, r, 3).replace("\n", " ")
-        
-        # Забираем тексты из двух соседних столбцов этой группы
-        val_left = get_val(sheet, r, group_col)
-        val_right = get_val(sheet, r, group_col + 1)
+        raw_subject = get_val(sheet, r, group_col)
+        room = get_val(sheet, r, room_col).replace("\n", " ")
 
         if "номер" in pair_num.lower() or "время" in pair_time.lower() or "пара" in pair_num.lower():
             continue
 
-        # ВЫРАВНИВАНИЕ: Определяем, в каком столбце предмет, а в каком аудитория
-        # Если в правом столбце есть цифры или маркеры онлайна, значит там аудитория
-        room_markers = ("ауд", "каб", "онлайн", "дист", "эиос", "online")
-        is_right_room = any(m in val_right.lower() for m in room_markers) or any(c.isdigit() for c in val_right)
-        is_left_room = any(m in val_left.lower() for m in room_markers) or any(c.isdigit() for c in val_left)
-
-        if is_left_room and not is_right_room:
-            # Если кабинет оказался слева, меняем их местами!
-            raw_subject = val_right
-            room = val_left
-        else:
-            # Стандартный порядок: предмет слева, кабинет справа
-            raw_subject = val_left
-            room = val_right
-        # Очищаем ячейки, если учебный отдел продублировал туда имя группы
+        # Фильтруем технический мусор, если туда вписано имя группы
         if g_low in raw_subject.lower() or raw_subject.lower() in g_low:
             raw_subject = ""
         if g_low in room.lower() or room.lower() in g_low:
@@ -356,17 +343,12 @@ def parse_single_group(sheet, group_col, group_name, all_links):
 
         if pair_num or pair_time or raw_subject:
             if info["is_removed"]:
-                day_lookup[current_day]["removed"].append({
-                    "num": pair_num, "subject": info["subject"].replace("\n", " "), "reason": info["remove_reason"]
-                })
-                day_lookup[current_day]["slots"].append({
-                    "num": pair_num, "time": pair_time, "custom_time": None, "subject": "", "room": "", "moved_from": None, "link": None
-                })
+                day_lookup[current_day]["removed"].append({"num": pair_num, "subject": info["subject"].replace("\n", " "), "reason": info["remove_reason"]})
+                day_lookup[current_day]["slots"].append({"num": pair_num, "time": pair_time, "custom_time": None, "subject": "", "room": "", "moved_from": None, "link": None})
             else:
-                day_lookup[current_day]["slots"].append({
-                    "num": pair_num, "time": pair_time, "custom_time": info["custom_time"], "subject": info["subject"], "room": room, "moved_from": info["moved_from"], "link": online_link
-                })
+                day_lookup[current_day]["slots"].append({"num": pair_num, "time": pair_time, "custom_time": info["custom_time"], "subject": info["subject"], "room": room, "moved_from": info["moved_from"], "link": online_link})
     return days_data
+
 
 
 
@@ -412,18 +394,19 @@ def generate_week_calendar(filename="schedule.xlsx", links_file="links.xlsx", ou
                         wb = openpyxl.load_workbook(f_path, data_only=True)
                         sheet = wb.active
                         groups_dict = {}
-                        skip_w = ("день", "пара", "время", "ауд", "каб", "место", "недел", "дата", "препод")
                         
-                        # Возвращаем умный цикл-указатель, чтобы контролировать шаг
-                        col = 4
-                        while col <= sheet.max_column:
+                        # Строгий фильтр мусора: исключаем технические заголовки аудиторий
+                        skip_w = ("день", "пара", "время", "ауд", "каб", "место", "недел", "дата", "препод", "фио")
+                        
+                        # Проверяем абсолютно каждый столбец по очереди
+                        for col in range(4, sheet.max_column + 1):
                             title = get_val(sheet, 1, col).replace("\n", " ").strip()
-                            # Если нашли реальную группу
+                            
+                            # Если в ячейке реально имя группы, а не заголовок аудитории
                             if title and not any(word in title.lower() for word in skip_w):
-                                groups_dict[title] = parse_single_group(sheet, col, title, mode_links)
-                                col += 2  # Жестко забираем этот столбец и его ауд (col+1), шагаем дальше
-                            else:
-                                col += 1  # Если в шапке мусор или пустой столбец, просто сдвигаемся на 1
+                                # Проверяем, что это не дубликат (на случай объединенных ячеек в шапке)
+                                if title not in groups_dict:
+                                    groups_dict[title] = parse_single_group(sheet, col, title, mode_links)
                         
                         if groups_dict:
                             weeks_list.append({
@@ -442,14 +425,11 @@ def generate_week_calendar(filename="schedule.xlsx", links_file="links.xlsx", ou
             wb = openpyxl.load_workbook(sched_path, data_only=True)
             sheet = wb.active
             groups_dict = {}
-            col = 4
-            while col <= sheet.max_column:
+            for col in range(4, sheet.max_column + 1):
                 title = get_val(sheet, 1, col).replace("\n", " ").strip()
-                if title and not any(w in title.lower() for w in ("день", "пара", "время", "ауд", "каб")):
-                    groups_dict[title] = parse_single_group(sheet, col, title, mode_links)
-                    col += 2
-                else:
-                    col += 1
+                if title and not any(w in title.lower() for w in ("день", "пара", "время", "ауд", "каб", "препод")):
+                    if title not in groups_dict:
+                        groups_dict[title] = parse_single_group(sheet, col, title, mode_links)
             
             app_data["main"] = {
                 "title": "🎓 Очное",
