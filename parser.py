@@ -303,7 +303,6 @@ def parse_subject_details(subject_text):
     return res
 
 def parse_single_group(sheet, group_col, group_name, all_links):
-    room_col = group_col + 1
     days_data, day_lookup, current_day = [], {}, None
     g_low = group_name.strip().lower()
 
@@ -321,20 +320,34 @@ def parse_single_group(sheet, group_col, group_name, all_links):
 
         pair_num = get_val(sheet, r, 2)
         pair_time = get_val(sheet, r, 3).replace("\n", " ")
-        raw_subject = get_val(sheet, r, group_col)
-        room = get_val(sheet, r, room_col).replace("\n", " ")
+        
+        # Забираем тексты из двух соседних столбцов этой группы
+        val_left = get_val(sheet, r, group_col)
+        val_right = get_val(sheet, r, group_col + 1)
 
-        # 1. ОТСЕКАЕМ ШАПКУ: Если это техническая строка с названиями столбцов
         if "номер" in pair_num.lower() or "время" in pair_time.lower() or "пара" in pair_num.lower():
             continue
 
-        # 2. ФИЛЬТР ИУП: Если в предмете или кабинете содержится название группы
+        # ВЫРАВНИВАНИЕ: Определяем, в каком столбце предмет, а в каком аудитория
+        # Если в правом столбце есть цифры или маркеры онлайна, значит там аудитория
+        room_markers = ("ауд", "каб", "онлайн", "дист", "эиос", "online")
+        is_right_room = any(m in val_right.lower() for m in room_markers) or any(c.isdigit() for c in val_right)
+        is_left_room = any(m in val_left.lower() for m in room_markers) or any(c.isdigit() for c in val_left)
+
+        if is_left_room and not is_right_room:
+            # Если кабинет оказался слева, меняем их местами!
+            raw_subject = val_right
+            room = val_left
+        else:
+            # Стандартный порядок: предмет слева, кабинет справа
+            raw_subject = val_left
+            room = val_right
+        # Очищаем ячейки, если учебный отдел продублировал туда имя группы
         if g_low in raw_subject.lower() or raw_subject.lower() in g_low:
             raw_subject = ""
         if g_low in room.lower() or room.lower() in g_low:
             room = ""
 
-        # Дополнительная проверка на пустые технические строки
         if not pair_num and not pair_time and not raw_subject:
             continue
 
@@ -344,20 +357,17 @@ def parse_single_group(sheet, group_col, group_name, all_links):
         if pair_num or pair_time or raw_subject:
             if info["is_removed"]:
                 day_lookup[current_day]["removed"].append({
-                    "num": pair_num, 
-                    "subject": info["subject"].replace("\n", " "), 
-                    "reason": info["remove_reason"]
+                    "num": pair_num, "subject": info["subject"].replace("\n", " "), "reason": info["remove_reason"]
                 })
                 day_lookup[current_day]["slots"].append({
-                    "num": pair_num, "time": pair_time, "custom_time": None, 
-                    "subject": "", "room": "", "moved_from": None, "link": None
+                    "num": pair_num, "time": pair_time, "custom_time": None, "subject": "", "room": "", "moved_from": None, "link": None
                 })
             else:
                 day_lookup[current_day]["slots"].append({
-                    "num": pair_num, "time": pair_time, "custom_time": info["custom_time"], 
-                    "subject": info["subject"], "room": room, "moved_from": info["moved_from"], "link": online_link
+                    "num": pair_num, "time": pair_time, "custom_time": info["custom_time"], "subject": info["subject"], "room": room, "moved_from": info["moved_from"], "link": online_link
                 })
     return days_data
+
 
 
 def parse_workbook_all_groups(excel_path, all_links):
