@@ -63,7 +63,7 @@ def ensure_template(template_path):
         '.btn-copy{background:var(--pri);color:#fff}',
         '.btn-close{background:#e2e8f0;color:var(--txt)}',
         '</style></head><body>',
-        '<header><h1>📅 Расписание</h1>',
+        '<header><h1> Расписание</h1>',
         '<div class="controls">',
         '<select id="modeSelect" class="mode-select" autocomplete="off"></select>',
         '<select id="weekSelect" class="week-select" autocomplete="off"></select>',
@@ -135,7 +135,7 @@ def ensure_template(template_path):
         '          var f=c.querySelector(".slot-footer");',
         '          if(s.moved_from){var mb=document.createElement("span");mb.className="moved-badge";mb.textContent="🔄 с "+s.moved_from;f.appendChild(mb);}',
         '          if(s.link){let u=s.link;var b=document.createElement("button");b.className="online-btn";b.textContent="💻 Ссылка";b.onclick=function(){showLinkModal(u);};f.appendChild(b);}',
-        '          if(s.room){var rb=document.createElement("span");rb.className="room-badge";rb.textContent="📍 "+s.room;f.appendChild(rb);}',
+        '          if(s.room){var rb=document.createElement("span");rb.className="room-badge";rb.textContent=" "+s.room;f.appendChild(rb);}',
         '        }else{c.className="slot-card empty-slot";c.innerHTML=\'<div class="slot-header"><span class="pair-num">\'+s.num+\' пара</span><span class="pair-time">\'+s.time+\'</span></div><div class="empty-label">Свободно</div>\';}',
         '        sb.appendChild(c);',
         '      });',
@@ -205,15 +205,14 @@ def load_all_online_links(links_path):
     wb = openpyxl.load_workbook(links_path, data_only=True)
     sheet = wb.active
     
-    # 🎯 АВТООПРЕДЕЛЕНИЕ ФОРМАТА: Ищем, в каком столбце лежит ссылка (в C или в D)
-    # Проверяем первые 5 строк таблицы на наличие интернет-ссылки
-    link_col = 4  # По умолчанию формат очников (столбец D)
-    notes_col = 5 # По умолчанию формат очников (столбец E)
+    
+    link_col = 4  
+    notes_col = 5 
     
     for r in range(1, 6):
         val_c = str(sheet.cell(row=r, column=3).value or "").lower()
         val_d = str(sheet.cell(row=r, column=4).value or "").lower()
-        # Если в столбце C написано 'ссылка' или текст начинается с http
+       
         if "http" in val_c or "ссылк" in val_c or "zoom" in val_c or "teams" in val_c:
             link_col = 3   # Переключаемся на формат ИУП (ссылка в C)
             notes_col = 4  # Пароль в D
@@ -440,8 +439,8 @@ def generate_week_calendar(filename="schedule.xlsx", links_file="links.xlsx", ou
                         groups_dict[title] = parse_single_group(sheet, col, title, mode_links)
             
             app_data["main"] = {
-                "title": "🎓 Очное",
-                "weeks": [{"label": "📅 Текущая неделя", "is_current": True, "groups": groups_dict}]
+                "title": "Очное",
+                "weeks": [{"label": "Текущая неделя", "is_current": True, "groups": groups_dict}]
             }
 
     with open(template_path, "r", encoding="utf-8") as tf:
