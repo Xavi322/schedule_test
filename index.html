@@ -53,7 +53,7 @@ header h1{font-size:1.2rem;font-weight:700}
 .btn-copy{background:var(--pri);color:#fff}
 .btn-close{background:#e2e8f0;color:var(--txt)}
 </style></head><body>
-<header><h1>📅 Расписание</h1>
+<header><h1> Расписание</h1>
 <div class="controls">
 <select id="modeSelect" class="mode-select" autocomplete="off"></select>
 <select id="weekSelect" class="week-select" autocomplete="off"></select>
@@ -125,7 +125,7 @@ function renderCurrentView(){
           var f=c.querySelector(".slot-footer");
           if(s.moved_from){var mb=document.createElement("span");mb.className="moved-badge";mb.textContent="🔄 с "+s.moved_from;f.appendChild(mb);}
           if(s.link){let u=s.link;var b=document.createElement("button");b.className="online-btn";b.textContent="💻 Ссылка";b.onclick=function(){showLinkModal(u);};f.appendChild(b);}
-          if(s.room){var rb=document.createElement("span");rb.className="room-badge";rb.textContent="📍 "+s.room;f.appendChild(rb);}
+          if(s.room){var rb=document.createElement("span");rb.className="room-badge";rb.textContent=" "+s.room;f.appendChild(rb);}
         }else{c.className="slot-card empty-slot";c.innerHTML='<div class="slot-header"><span class="pair-num">'+s.num+' пара</span><span class="pair-time">'+s.time+'</span></div><div class="empty-label">Свободно</div>';}
         sb.appendChild(c);
       });
