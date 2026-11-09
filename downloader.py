@@ -19,41 +19,56 @@ def get_moscow_today():
     return datetime.datetime.now(tz_msk).date()
 
 def extract_folder_data_from_html(session, public_url):
-    resp = session.get(public_url, headers=HEADERS, timeout=20)
-    resp.raise_for_status()
-    html = resp.text
-
-    base_dl_url = ""
-    wg_pos = html.find('"weblink_get"')
-    if wg_pos != -1:
-        snippet = html[wg_pos:wg_pos + 600]
-        url_m = re.search(r'"url"\s*:\s*("https?:[^"]+")', snippet)
-        if url_m:
-            base_dl_url = json.loads(url_m.group(1))
-
-    if not base_dl_url:
-        fallback_m = re.search(r'(https?://[a-zA-Z0-9.-]+/(?:weblink/get|public/get))', html.replace("\\/", "/"))
-        if fallback_m:
-            base_dl_url = fallback_m.group(1)
-
-    items = []
-    seen_weblinks = set()
-    for m in re.finditer(r'"weblink"\s*:\s*("[^"]+")', html):
+    """Делает до 3 попыток получить список файлов (защита от пустых ответов Mail.ru)."""
+    for attempt in range(1, 4):
         try:
-            weblink_val = json.loads(m.group(1)).strip("/")
-        except Exception:
-            continue
-        if weblink_val in seen_weblinks:
-            continue
-        _, _, filename = weblink_val.rpartition("/")
-        if not filename:
-            continue
-        low_name = filename.lower()
-        if low_name.endswith((".xlsx", ".xls")) or "ссылк" in low_name:
-            seen_weblinks.add(weblink_val)
-            items.append({"name": filename, "weblink": weblink_val})
+            # Добавляем случайный параметр, чтобы обходить кэш Mail.ru
+            sep = "&" if "?" in public_url else "?"
+            url_nocache = f"{public_url}{sep}_={int(time.time())}"
+            resp = session.get(url_nocache, headers=HEADERS, timeout=15)
+            resp.raise_for_status()
+            html = resp.text
 
-    return items, base_dl_url
+            base_dl_url = ""
+            wg_pos = html.find('"weblink_get"')
+            if wg_pos != -1:
+                snippet = html[wg_pos:wg_pos + 600]
+                url_m = re.search(r'"url"\s*:\s*("https?:[^"]+")', snippet)
+                if url_m:
+                    base_dl_url = json.loads(url_m.group(1))
+
+            if not base_dl_url:
+                fb = re.search(r'(https?://[a-zA-Z0-9.-]+/(?:weblink/get|public/get))', html.replace("\\/", "/"))
+                if fb:
+                    base_dl_url = fb.group(1)
+
+            items = []
+            seen = set()
+            for m in re.finditer(r'"weblink"\s*:\s*("[^"]+")', html):
+                try:
+                    weblink_val = json.loads(m.group(1)).strip("/")
+                except Exception:
+                    continue
+                if weblink_val in seen:
+                    continue
+                _, _, filename = weblink_val.rpartition("/")
+                if not filename:
+                    continue
+                low_name = filename.lower()
+                # Берем таблицы (.xlsx, .xls) И файлы .pdf (если в них есть даты или слово 'распис')
+                if low_name.endswith((".xlsx", ".xls", ".pdf")) or "ссылк" in low_name:
+                    seen.add(weblink_val)
+                    items.append({"name": filename, "weblink": weblink_val})
+
+            if items:
+                return items, base_dl_url
+            print(f"⚠️ Попытка {attempt}/3: Mail.ru вернул пустой список, пробуем снова через 2 сек...")
+        except Exception as e:
+            print(f"⚠️ Попытка {attempt}/3 не удалась ({e}), ждем 2 сек...")
+        time.sleep(2)
+
+    return [], ""
+
 
 def parse_week_range(filename, today):
     """
