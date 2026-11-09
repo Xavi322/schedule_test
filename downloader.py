@@ -57,52 +57,63 @@ def extract_folder_data_from_html(session, public_url):
 
 def parse_week_range(filename, today):
     """
-    Безошибочно извлекает даты начала и конца недели из названия файла:
-    1) Сначала ищет полный диапазон с двумя месяцами: '26.10-01.11.2026' или '26.10 - 01.11'
-    2) Затем ищет сокращенный диапазон внутри одного месяца: '19-25.10.2026'
+    Всеядный парсер дат из названия файла.
+    Понимает: '09-15.11.2026', '09.11 - 15.11', 'с 09.11 по 15.11', '9-15 ноября' и т.д.
     """
-    # Вариант А (Приоритетный): Две полные даты с точками ('26.10-01.11.2026')
+    low = filename.lower()
+    months_map = {
+        "янв": 1, "фев": 2, "мар": 3, "апр": 4, "мая": 5, "май": 5, "июн": 6,
+        "июл": 7, "авг": 8, "сен": 9, "окт": 10, "ноя": 11, "дек": 12
+    }
+
+    # 1. Ищем две полные числовые даты: '09.11 ... 15.11' (через тире, 'по' или пробелы)
     full_m = re.search(
-        r"(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?\s*[-–—]\s*(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?",
-        filename
+        r"(\d{1,2})\s*\.\s*(\d{1,2})(?:\s*\.\s*(\d{2,4}))?\s*(?:[-–—]+|по)\s*(\d{1,2})\s*\.\s*(\d{1,2})(?:\s*\.\s*(\d{2,4}))?",
+        low
     )
     if full_m:
         d1, m1, y1 = int(full_m.group(1)), int(full_m.group(2)), full_m.group(3)
         d2, m2, y2 = int(full_m.group(4)), int(full_m.group(5)), full_m.group(6)
-
         year2 = int(y2) if y2 else (int(y1) if y1 else today.year)
-        if year2 < 100:
-            year2 += 2000
+        if year2 < 100: year2 += 2000
         year1 = int(y1) if y1 else year2
-        if year1 < 100:
-            year1 += 2000
-
-        # Если перешли через Новый год (например, 28.12 - 03.01.2027), а первый год не указан
-        if not y1 and m1 == 12 and m2 == 1:
-            year1 = year2 - 1
-
+        if year1 < 100: year1 += 2000
+        if not y1 and m1 == 12 and m2 == 1: year1 = year2 - 1
         try:
             s_d = datetime.date(year1, m1, d1)
             e_d = datetime.date(year2, m2, d2)
-            label = f"{s_d.strftime('%d.%m')} — {e_d.strftime('%d.%m')}"
-            return s_d, e_d, label
+            return s_d, e_d, f"{s_d.strftime('%d.%m')} — {e_d.strftime('%d.%m')}"
         except ValueError:
             pass
 
-    # Вариант Б: Сокращенный диапазон '19-25.10.2026' (слева от первого числа НЕ должно быть точки!)
-    short_m = re.search(r"(?<![.\d])(\d{1,2})\s*[-–—]\s*(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?", filename)
+    # 2. Сокращенный диапазон внутри одного месяца: '09-15.11.2026' или 'с 9 по 15.11'
+    short_m = re.search(
+        r"(?<![.\d])(\d{1,2})\s*(?:[-–—]+|по)\s*(\d{1,2})\s*\.\s*(\d{1,2})(?:\s*\.\s*(\d{2,4}))?",
+        low
+    )
     if short_m:
         d1, d2, month, y_str = int(short_m.group(1)), int(short_m.group(2)), int(short_m.group(3)), short_m.group(4)
         year = int(y_str) if y_str else today.year
-        if year < 100:
-            year += 2000
+        if year < 100: year += 2000
         try:
             s_d = datetime.date(year, month, d1)
             e_d = datetime.date(year, month, d2)
-            label = f"{s_d.strftime('%d.%m')} — {e_d.strftime('%d.%m')}"
-            return s_d, e_d, label
+            return s_d, e_d, f"{s_d.strftime('%d.%m')} — {e_d.strftime('%d.%m')}"
         except ValueError:
             pass
+
+    # 3. Если месяц написан словом ('9-15 ноября' или 'с 9 по 15 ноября')
+    for m_prefix, m_num in months_map.items():
+        if m_prefix in low:
+            word_m = re.search(r"(\d{1,2})\s*(?:[-–—]+|по)\s*(\d{1,2})\s*" + m_prefix, low)
+            if word_m:
+                d1, d2 = int(word_m.group(1)), int(word_m.group(2))
+                try:
+                    s_d = datetime.date(today.year, m_num, d1)
+                    e_d = datetime.date(today.year, m_num, d2)
+                    return s_d, e_d, f"{s_d.strftime('%d.%m')} — {e_d.strftime('%d.%m')}"
+                except ValueError:
+                    pass
 
     return None
 
