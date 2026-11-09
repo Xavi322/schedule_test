@@ -136,45 +136,60 @@ def save_item(session, base_dl_url, item, local_filename):
     return True
 
 def sync_single_folder(session, folder_url, prefix, today, monday):
-    """Скачивает ссылки и недели из одной конкретной папки облака."""
+    """Скачивает ссылки и все актуальные недели из папки без потери нестандартных файлов."""
     print(f"\n🌐 Проверяем папку [{prefix.upper()}]: {folder_url}")
     xlsx_items, base_dl_url = extract_folder_data_from_html(session, folder_url)
     if not xlsx_items:
         print(f"⚠️ В папке [{prefix}] не найдено таблиц!")
         return []
 
-    # 1. Качаем файл со ссылками (если он есть в этой папке)
+    print(f"📂 Все найденные таблицы в [{prefix}]: {[i.get('name') for i in xlsx_items]}")
+
+    # 1. Качаем файл со ссылками
     links_item = next((i for i in xlsx_items if "ссылк" in i.get("name", "").lower()), None)
     if links_item:
         save_item(session, base_dl_url, links_item, f"{prefix}_links.xlsx")
         if prefix == "main":
             save_item(session, base_dl_url, links_item, "links.xlsx")
 
-    # 2. Собираем файлы недель
+    # 2. Разбираем все остальные таблицы расписания
     sched_candidates = [i for i in xlsx_items if i != links_item]
     dated_weeks = []
+    undated_weeks = []
+
     for item in sched_candidates:
-        info = parse_week_range(item.get("name", ""), today)
+        raw_name = item.get("name", "")
+        info = parse_week_range(raw_name, today)
         if info:
             s_d, e_d, label = info
             if e_d >= monday:
-                is_curr = (s_d <= today <= e_d) or (s_d == monday)
+                is_curr = (s_d <= today <= e_d + datetime.timedelta(days=1)) or (s_d == monday)
                 dated_weeks.append({
                     "start": s_d, "item": item, "is_current": is_curr,
                     "label": f"📅 {label} (Текущая)" if is_curr else f"📅 {label}"
                 })
-
-    if not dated_weeks:
+        else:
+            clean_lbl = re.sub(r"\.xlsx?$", "", raw_name, flags=re.IGNORECASE).strip()
+            undated_weeks.append({
+                "start": today, "item": item, "is_current": False,
+                "label": f"📅 {clean_lbl}"
+            })
+    if not dated_weeks and not undated_weeks:
         for item in sched_candidates:
             info = parse_week_range(item.get("name", ""), today)
-            lbl = f"📅 {info[2]}" if info else item.get("name", "Неделя")
-            s_d = info[0] if info else today
-            dated_weeks.append({"start": s_d, "item": item, "label": lbl, "is_current": False})
+            s_d, _, label = info if info else (today, today, item.get("name", "Неделя"))
+            dated_weeks.append({"start": s_d, "item": item, "label": f"📅 {label}", "is_current": False})
 
     dated_weeks.sort(key=lambda w: w["start"])
+    final_weeks = dated_weeks + undated_weeks
+
+    # Если ни одна неделя не помечена как текущая, делаем текущей самую первую
+    if final_weeks and not any(w["is_current"] for w in final_weeks):
+        first_w = next(iter(final_weeks))
+        first_w["is_current"] = True
 
     folder_meta = []
-    for idx, w in enumerate(dated_weeks):
+    for idx, w in enumerate(final_weeks):
         local_fname = f"{prefix}_schedule_{idx}.xlsx"
         if save_item(session, base_dl_url, w["item"], local_fname):
             folder_meta.append({
@@ -184,6 +199,7 @@ def sync_single_folder(session, folder_url, prefix, today, monday):
                 "is_current": w["is_current"]
             })
     return folder_meta
+
 
 def sync_cloud_files(folders_config):
     """
